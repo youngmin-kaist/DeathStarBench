@@ -9,6 +9,9 @@ spec:
   {{- range .Values.ports }}
   - name: "{{ .port }}"
     port: {{ .port }}
+    {{- if .appProtocol }}
+    appProtocol: {{ .appProtocol }}
+    {{- end }}
     {{- if .protocol}}
     protocol: {{ .protocol }}
     {{- end }}
