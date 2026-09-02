@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -66,12 +67,17 @@ func initializeDatabase(url string) (*mongo.Client, func()) {
 	resCollection := database.Collection("reservation")
 	numCollection := database.Collection("number")
 
-	_, err = resCollection.InsertMany(context.TODO(), newReservations)
+	// The reservation collection also receives runtime bookings, so it gets
+	// no unique index; the single seed row is upserted instead.
+	seedRes := newReservations[0].(Reservation)
+	_, err = resCollection.ReplaceOne(context.TODO(),
+		bson.D{{"hotelId", seedRes.HotelId}, {"customerName", seedRes.CustomerName}},
+		seedRes, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
 
-	_, err = numCollection.InsertMany(context.TODO(), newNumbers)
+	err = seedCollection(numCollection, bson.D{{"hotelId", 1}}, newNumbers)
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
@@ -82,4 +88,21 @@ func initializeDatabase(url string) (*mongo.Client, func()) {
 			log.Fatal().Msg(err.Error())
 		}
 	}
+}
+
+// seedCollection inserts seed documents idempotently. The unique index on the
+// seed identity turns repeated initialization (pod restarts, multiple
+// replicas) into a no-op instead of duplicating the data; every process
+// inserts only after its own index creation succeeded, so duplicates cannot
+// slip in between. See https://github.com/delimitrou/DeathStarBench/pull/359.
+func seedCollection(c *mongo.Collection, key bson.D, docs []interface{}) error {
+	idx := mongo.IndexModel{Keys: key, Options: options.Index().SetUnique(true)}
+	if _, err := c.Indexes().CreateOne(context.TODO(), idx); err != nil {
+		return err
+	}
+	_, err := c.InsertMany(context.TODO(), docs, options.InsertMany().SetOrdered(false))
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
+		return err
+	}
+	return nil
 }
