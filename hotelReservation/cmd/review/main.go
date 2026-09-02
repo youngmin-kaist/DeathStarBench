@@ -5,6 +5,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"strconv"
 
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/registry"
@@ -16,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"time"
+	"syscall"
 	// "github.com/bradfitz/gomemcache/memcache"
 )
 
@@ -86,6 +88,15 @@ func main() {
 		MongoClient: mongo_session,
 		MemcClient:  memc_client,
 	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		log.Info().Msgf("Received signal %s, deregistering service from consul...", sig.String())
+		srv.Shutdown()
+		os.Exit(0)
+	}()
 
 	log.Info().Msg("Starting server...")
 	log.Fatal().Msg(srv.Run().Error())
