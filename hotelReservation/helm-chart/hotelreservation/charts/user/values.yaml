@@ -2,6 +2,7 @@ name: user
 
 ports:
   - port: 8086
+    appProtocol: grpc
     targetPort: 8086
  
 container:

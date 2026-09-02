@@ -2,6 +2,7 @@ name: geo
 
 ports:
   - port: 8083
+    appProtocol: grpc
     targetPort: 8083
  
 container:

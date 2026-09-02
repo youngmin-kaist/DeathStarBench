@@ -2,6 +2,7 @@ name: recommendation
 
 ports:
   - port: 8085
+    appProtocol: grpc
     targetPort: 8085
  
 container:
