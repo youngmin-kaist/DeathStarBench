@@ -2,6 +2,7 @@ name: rate
 
 ports:
   - port: 8084
+    appProtocol: grpc
     targetPort: 8084
  
 container:

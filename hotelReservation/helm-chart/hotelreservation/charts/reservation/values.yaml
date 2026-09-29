@@ -2,6 +2,7 @@ name: reservation
 
 ports:
   - port: 8087
+    appProtocol: grpc
     targetPort: 8087
  
 container:

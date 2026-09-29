@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -92,7 +93,7 @@ func initializeDatabase(url string) (*mongo.Client, func()) {
 	log.Info().Msg("Successfully connected to MongoDB")
 
 	collection := client.Database("review-db").Collection("reviews")
-	_, err = collection.InsertMany(context.TODO(), newReviews)
+	err = seedCollection(collection, bson.D{{"reviewId", 1}}, newReviews)
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
@@ -104,4 +105,21 @@ func initializeDatabase(url string) (*mongo.Client, func()) {
 		}
 	}
 
+}
+
+// seedCollection inserts seed documents idempotently. The unique index on the
+// seed identity turns repeated initialization (pod restarts, multiple
+// replicas) into a no-op instead of duplicating the data; every process
+// inserts only after its own index creation succeeded, so duplicates cannot
+// slip in between. See https://github.com/delimitrou/DeathStarBench/pull/359.
+func seedCollection(c *mongo.Collection, key bson.D, docs []interface{}) error {
+	idx := mongo.IndexModel{Keys: key, Options: options.Index().SetUnique(true)}
+	if _, err := c.Indexes().CreateOne(context.TODO(), idx); err != nil {
+		return err
+	}
+	_, err := c.InsertMany(context.TODO(), docs, options.InsertMany().SetOrdered(false))
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
+		return err
+	}
+	return nil
 }
